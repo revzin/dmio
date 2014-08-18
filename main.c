@@ -6,11 +6,37 @@
 #include "mem.h"
 
 //#define TEST_MEM
-#define TEST_DM
+//#define TEST_DM
+#define TEST_HEIRARCHY_TRAVERSAL
+
 int main(int argc, char **argv)
 {
 	MEM_do_guard();
+
+#ifdef TEST_HEIRARCHY_TRAVERSAL
+	ValveDataModel *vdm;
+	DMElement *parent, *child_1, *child_11, *child_12, *child_2, *child_21, *child_22, *child_23;
+
+	vdm = MEM_calloc(sizeof(ValveDataModel), "test datamodel");
+	DM_Init(vdm, "test datamodel", 1);
+
+	parent = DM_add_element(vdm, "parent", "parent");
+	child_1 = DM_add_element(vdm, "child_1", "plain_child");
+	child_2 = DM_add_element(vdm, "child_2", "plain_child");
+	child_11 = DM_add_element(vdm, "child_11", "plain_child");
+	child_12 = DM_add_element(vdm, "child_12", "plain_child");
+	child_21 = DM_add_element(vdm, "child_21", "plain_child");
+	child_22 = DM_add_element(vdm, "child_22", "array_child");
+	child_23 = DM_add_element(vdm, "child_23", "array_child");
+
+	DM_Release(vdm);
+	MEM_free(vdm);
+	MEM_printblocks(stdout);
+	_getch();
 	
+	
+#endif 
+
 #ifdef TEST_DM
 	DMElement *ele;
 	
@@ -83,7 +109,7 @@ int main(int argc, char **argv)
 
 	DMEA_GetString(str, &s2);
 
-	sar_back = DMEA_GetStringArray(stringarray, sar_back);
+	sar_back = DMEA_GetStringArray(stringarray);
 	
 	DM_remove_element(&dm, ele);
 

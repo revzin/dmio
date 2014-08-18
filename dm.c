@@ -6,6 +6,12 @@
 
 #include "dm.h"
 
+#define DME_SAME_TYPE(type_1, type_2) \
+	!strncmp(type_1, type_2, DM_ELEMENT_MAX_TYPE)
+
+#define DME_SAME_NAME(name_1, name_2) \
+	!strncmp(name_1, name_2, DM_ELEMENT_MAX_NAME)
+
 static char *dupstring(char *string, char *desc)
 {
 	int size = strlen(string) + 1;
@@ -16,7 +22,6 @@ static char *dupstring(char *string, char *desc)
 	strncpy(new, string, size);
 	return new;
 }
-
 
 static size_t type_to_elemsize(DMEAType t)
 {	
@@ -673,10 +678,19 @@ DMElement *DM_add_element(ValveDataModel *dm, char *name, char *type)
 }
 
 
-void DM_remove_element(ValveDataModel *dm, DMElement *ele)
+void dm_remove_element_internal(ValveDataModel *dm, DMElement *ele)
 {
 	DMEAttribute *a;
 
+	while (a = list_pophead(&ele->attrs)) {
+		remove_attr_internal(ele, a);
+		MEM_free(a);
+	}
+
+}
+
+void DM_remove_element(ValveDataModel *dm, DMElement *ele)
+{
 	assert(dm && ele);
 
 	if (list_index(&dm->elems, ele) == -1) {
@@ -684,10 +698,7 @@ void DM_remove_element(ValveDataModel *dm, DMElement *ele)
 		return;
 	}
 	
-	while (a = list_pophead(&ele->attrs)) {
-		remove_attr_internal(ele, a);
-		MEM_free(a);
-	}
+	dm_remove_element_internal(dm, ele);
 	
 	list_remove(&dm->elems, ele);
 
@@ -710,7 +721,10 @@ void DM_Release(ValveDataModel *dm)
 {
 	DMElement *ele;
 	while (ele = list_pophead(&dm->elems)) {
-		DM_remove_element(dm, ele);
+		dm_remove_element_internal(dm, ele);
+		MEM_free(ele->name);
+		MEM_free(ele->type);
+		MEM_free(ele);
 	}
 	MEM_free(dm->format);
 }
@@ -763,3 +777,96 @@ int DMEA_ArrayLen(DMEAttribute *a)
 	else return -1;
 }
 
+/* ============================================= */
+
+DMEAttribute *DME_get_attribute(DMElement *ele, const char *attrname)
+{
+	DMEAttribute *a;
+	assert(ele && attrname);
+	LIST_ITER(&ele->attrs, a) {
+		if (!strncmp(attrname, a->name, DME_ATTRIBUTE_MAX_NAME)) {
+			return a;
+		}
+	}
+	return NULL;
+}
+
+DMEAttribute *DME_get_typed_attribute(DMElement *ele, const char *attrname, DMEAType type)
+{
+	assert(ele && attrname);
+	DMEAttribute *a = DME_get_attribute(ele, attrname);
+	if (a && a->type == type)
+		return a;
+	return NULL;
+}
+
+DMElement *DME_find_child_element(DMElement *ele, const char *elename, const char *eletype, int traversal_depth)
+{
+	DMEAttribute *a;
+	DMElement *e, *elems = NULL;
+	int toteleattr = 0, maxeleattr = 0, i;
+
+	assert(elename && eletype && traversal_depth >= 0);
+
+	if (traversal_depth > 0) {
+		maxeleattr = list_count(&ele->attrs) * 2;
+		elems = MEM_malloc(maxeleattr * sizeof(DMElement *), __func__);
+	}
+
+	/* step one: go over all attrs, search through immidiate children 
+	 * and collect them if going deeper */
+	LIST_ITER(&ele->attrs, a) {
+		if (a->type == AT_ELEMENT) {
+			e = (DMElement *) a->val.data;
+
+			if (DME_SAME_NAME(elename, e->name) && DME_SAME_TYPE(eletype, e->type)) {
+				if (elems)
+					MEM_free(elems);
+				return e;
+			}
+			if (traversal_depth > 0) {
+				elems[toteleattr] = *e;
+				toteleattr++;
+				if (toteleattr == maxeleattr) {
+					maxeleattr = 3 * maxeleattr;
+					elems = MEM_realloc(elems, sizeof(DMElement *) * maxeleattr, __func__);
+				}
+			}
+		}
+		else if (a->type == AT_ELEMENT_ARRAY) {
+			e = (DMElement *) a->val.data;
+
+			for (i = 0; i < a->val.totelem; ++i) {
+				if (DME_SAME_NAME(e[i].name, elename) && DME_SAME_TYPE(e[i].type, eletype)) {
+					if (elems)
+						MEM_free(elems);
+					return e;
+				}
+
+				if (traversal_depth > 0) {
+					elems[toteleattr] = e[i];
+					toteleattr++;
+
+					if (toteleattr == maxeleattr) {
+						maxeleattr = 3 * maxeleattr;
+						elems = MEM_realloc(elems, sizeof(DMElement *) * maxeleattr, __func__);
+					}
+				}
+			} /* end going through all array elements */
+		} /* if (a->type == AT_ELEMENT_ARRAY) */
+	} /* LIST_ITER */
+
+	if (traversal_depth > 0) {
+		/* step 2: recurse on collected elements */
+		for (i = 0; i < toteleattr; ++i) {
+			e = DME_find_child_element(&elems[i], elename, eletype, traversal_depth - 1);
+			if (e)
+				return e;
+		}
+	}
+
+	if (elems) 
+		MEM_free(elems);
+
+	return NULL;
+}
