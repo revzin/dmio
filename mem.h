@@ -3,6 +3,7 @@
 
 void *MEM_malloc(size_t size, char *desc);
 void *MEM_calloc(size_t size, char *desc);
+void *MEM_realloc(void *mem, size_t newsize, char *desc);
 void MEM_free(void *mem);
 
 void MEM_printblocks(FILE *f);

@@ -24,9 +24,15 @@ typedef struct mem
 
 static mem Memory = {0};
 
+
 void *MEM_malloc(size_t size, char *desc)
 {
 	block *memblock = calloc(1, sizeof(block));
+	
+	if (size < 1) {
+		printf("%s\n", "Attempt to alloc zero memory!");
+		return NULL;
+	}
 
 	if (Memory.guard) {
 		memblock->size = size;
@@ -39,7 +45,6 @@ void *MEM_malloc(size_t size, char *desc)
 	}
 	else
 		return malloc(size);
-	
 }
 
 void *MEM_calloc(size_t size, char *desc)
@@ -47,6 +52,37 @@ void *MEM_calloc(size_t size, char *desc)
 	void *data = MEM_malloc(size, desc);
 	memset(data, 0, size);
 	return data;
+}
+
+void *MEM_realloc(void *mem, size_t newsize, char *desc)
+{
+	if (Memory.guard) {
+		block *b;
+
+		if (!mem) {
+			printf("%s\n", "Warning: attempt to free NULL memory!");
+			return NULL;
+		}
+
+		if (newsize < 1) {
+			printf("%s\n", "Warning: attempt to realloc to zero memory!");
+			return NULL;
+		}
+
+		LIST_ITER(&Memory.blocks, b) {
+			if (b->data == mem) {
+				b->description = desc;
+				b->data = realloc(b->data, newsize);
+				b->size = newsize;
+				return b->data;
+			}
+		}
+
+		printf("%s\n", "Warning: trying to realloc non-init memory!\n");
+		return NULL;
+	}
+	else
+		return realloc(mem, newsize);
 }
 
 void MEM_free(void *mem)
@@ -125,7 +161,7 @@ void MEM_printblocks(FILE *f)
 			}
 		}
 		if (Memory.totsize < 1024)
-			printf("Total: %d memory blocks over %d %s.\n", Memory.totblocks, bytes, Memory.totsize);
+			printf("Total: %d memory blocks over %d %s.\n", Memory.totblocks, Memory.totsize, bytes);
 		else {
 			float nsize;
 			const char *size_unit = normalize_size(Memory.totsize, &nsize);
