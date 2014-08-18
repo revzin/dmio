@@ -118,3 +118,13 @@ void *list_pophead(list *l)
 	d->next = NULL;
 	return d;
 }
+
+int list_has_entry(list *l, void *lldata) 
+{
+	list_entry *le;
+	LIST_ITER(l, le) {
+		if ((void *) le == lldata)
+			return 1;
+	}
+	return 0;
+}

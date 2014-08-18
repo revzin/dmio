@@ -36,6 +36,8 @@ void *list_find(list *l, int index);
 
 int list_index(list *l, void *lldata);
 
+int list_has_entry(list *l, void *lldata);
+
 void *list_pophead(list *l);
 
 
